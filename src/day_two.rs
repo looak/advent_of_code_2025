@@ -6,35 +6,47 @@ fn load_ids() -> Vec<String>
     return file.lines().flat_map(|line| line.split(',').map(|s| s.to_string()).collect::<Vec<String>>()).collect();
 }
 
-fn validate(itr: u64, len: usize) -> bool
-{    
-    if len % 2 > 0
-    {
-        // length must be even
-        return false;
-    }
+fn has_pattern(pattern: &str, remaining: &str) -> bool
+{
+    let rem_end = remaining.len();
+    let step = pattern.len();
+    let mut itr = 0;
 
-    let mut id = itr;
-    let mut half = len / 2;
-    
-    // store first half digits in a vector
-    let mut digits:Vec<u64> = Vec::new();
-    while half > 0
+    while itr < rem_end
     {
-        digits.push(id % 10);
-        id /= 10;
-        half -= 1;
-    }
-
-    // check second half digits against first half
-    for digit in &digits
-    {
-        let remainder = id % 10;
-        if *digit != remainder
+        if itr + step > rem_end
         {
             return false;
         }
-        id /= 10;
+
+        let segment = &remaining[itr..itr + step];
+        if segment != pattern
+        {
+            return false;
+        }
+        itr += step;
+    }
+
+    return true;
+}
+
+fn validate(number: u64) -> bool
+{    
+    // identify possible digit pairs in the id, 2 digits, 3 digits, 4 digits etc.
+    // if a number contains 8 digits, 2s and 4s are the only valid repetitions.
+    // if a number contains 9 diigits, only 3s are valid repetitions.
+    // if a number contains 6 digits, 3s and 2s are valid repetitions.
+    let num_str = number.to_string();
+    let mut digit_count = 1;
+    while digit_count <= num_str.len() / 2
+    {
+        let pattern = &num_str[0..digit_count];
+        let remaining = &num_str[digit_count..];
+        if has_pattern(pattern, remaining)
+        {
+            return false;
+        }
+        digit_count += 1;
     }
 
     return true;
@@ -62,15 +74,13 @@ pub fn execute()
 
         while itr <= range_end
         {
-            let len = itr.to_string().len();
-            if validate(itr, len)
+            if validate(itr) == false
             {
-                println!("Valid ID: {}", itr);
+                println!("Invalid ID: {}", itr);
                 sum += itr;
             }
             itr += 1;
         }
-
     }
 
     println!("Sum of valid IDs: {}", sum);
