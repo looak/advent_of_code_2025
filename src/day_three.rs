@@ -5,44 +5,38 @@ fn load_batteries() -> Vec<String>
     return file.lines().map(|line| line.to_string()).collect();
 }
 
-fn find_largest_capacity(battery: &String) -> u32
-{
-    // twp iterators, one for tens and one for ones.
-    // tens has to be to the left of ones, i.e.
-    let mut largest: u32 = 0;
-    let mut tens_index: usize = 0;
-    for (index, tens) in battery.chars().enumerate()
-    {
-        if index + 1 >= battery.len()
+fn find_largest_capacity(battery: &String) -> u64
+{   
+    let jolt_length = 12;
+    let mut joltage: [char; 12] = ['0'; 12];
+    let mut begin_index: u8 = 0;
+    let mut end_index: u8 = battery.len() as u8 - jolt_length;
+    for jolt_index in 0..12
+    { 
+        let mut largest: char = '0'; 
+        for index in begin_index..=end_index
         {
-            // last index can never be tens place.
-            break;
+            let largest_value = largest.to_digit(10).unwrap();
+            let digit_char = battery.chars().nth(index as usize).unwrap();
+            let value = digit_char.to_digit(10).unwrap();
+            if value > largest_value
+            {
+                largest = digit_char;
+                begin_index = index;
+            }
         }
-;
-        let value = tens.to_digit(10).unwrap();
-        if value > largest
-        {
-            largest = value;
-            tens_index = index;
-        }
-    }
 
-    let tens = battery.chars().nth(tens_index).unwrap().to_digit(10).unwrap();
-    for index in tens_index+1..battery.len()
-    {
-        let ones = battery.chars().nth(index).unwrap().to_digit(10).unwrap();
-        let value = tens * 10 + ones;
-        if value > largest
-        {
-            largest = value;
-        }
-    } 
+        joltage[jolt_index] = largest;
+        begin_index += 1;
+        end_index += 1;
+    }
+    let largest = joltage.iter().collect::<String>().parse::<u64>().unwrap();
     return largest;
 }
 
 pub fn execute()
 {
-    println!("Hello Day Three!");
+    println!("Hello Day Three !");
     let batteries = load_batteries();
 
     let mut sum = 0;
