@@ -1,7 +1,7 @@
 // day_seven.rs
 use std::fs;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
 enum GridState {
     Empty,
     Splitter,
@@ -10,7 +10,23 @@ enum GridState {
     End,
 }
 
-fn load_grid() -> (Vec<GridState>, usize) {
+struct GridNode {
+    count: u64,
+    state: GridState,
+    fully_processed: bool,
+}
+
+impl GridNode {
+    fn new(state: GridState) -> Self {
+        Self {
+            count: 0,
+            state,
+            fully_processed: false,
+        }
+    }
+}
+
+fn load_grid() -> (Vec<GridNode>, usize) {
     // 1. Read the file (imperative step, fine for I/O)
     let file_content = fs::read_to_string("./src/beam.txt")
         .expect("Unable to read file");
@@ -27,16 +43,33 @@ fn load_grid() -> (Vec<GridState>, usize) {
         .flat_map(|line| line.chars()) // Flattens: Row 1 chars -> Row 2 chars -> ...
         .map(|ch| match ch {
             // We RETURN the value, we do not push it.
-            '.' => GridState::Empty,
-            '^' => GridState::Splitter,
-            '|' => GridState::Beam,
-            'S' => GridState::Start,
-            '\0' => GridState::End,
+            '.' => GridNode::new(GridState::Empty),
+            '^' => GridNode::new(GridState::Splitter),
+            '|' => GridNode::new(GridState::Beam),
+            'S' => GridNode::new(GridState::Start),
+            '\0' => GridNode::new(GridState::End),
             _ => panic!("Unexpected character: {}", ch),
         })
         .collect(); // The compiler sees we return Vec<GridState> and builds it here.
     
     (grid, width)
+}
+
+fn draw_grid(grid: &Vec<GridNode>, width: usize) {
+    for (index, node) in grid.iter().enumerate() {
+        if index % width == 0 && index != 0 {
+            println!();
+        }
+        let ch = match node.state {
+            GridState::Empty => '.',
+            GridState::Splitter => '^',
+            GridState::Beam => '|',
+            GridState::Start => 'S',
+            GridState::End => '\0',
+        };
+        print!("{}", ch);
+    }
+    println!();
 }
 
 pub fn execute() {
@@ -46,26 +79,12 @@ pub fn execute() {
 
     // recursive depth first populate beams from splitters
     // find start
-    let start_index = grid.iter().position(|state| *state == GridState::Start).expect("No start found");
+    let start_index = grid.iter().position(|grid_node| grid_node.state == GridState::Start).expect("No start found");
 
-    let mut beam_count = 0;
-    populate_beams(&mut grid, &mut beam_count, width, start_index);
+    let beam_count = populate_beams(&mut grid, width, start_index);
 
     // draw grid
-    grid.iter().enumerate().for_each(|(indx, state)| {
-        let local_indx: isize = indx as isize % width as isize;
-        if local_indx == 0 && indx != 0 {
-            println!();
-        }
-        let ch = match state {
-            GridState::Empty => '.',
-            GridState::Splitter => '^',
-            GridState::Beam => '|',
-            GridState::Start => 'S',
-            GridState::End => '\0',
-        };
-        print!("{}", ch);
-    });
+    // draw_grid(&grid, width);
 
     println!();
 
@@ -73,65 +92,49 @@ pub fn execute() {
     
 }
 
-fn populate_beams(grid: &mut Vec<GridState>, count: &mut usize, width: usize, index: usize) {
+fn populate_beams(grid: &mut Vec<GridNode>, width: usize, index: usize) -> u64 {
     // base case
     if index >= grid.len() {
-        return;
+        return 1;
     }
 
-    match grid[index] {
-        GridState::Start => {
-            populate_beams(grid, count, width, index + width);
-            return;
-        }
-        _ => {}
+    if (grid[index].fully_processed) {
+        return grid[index].count;
     }
 
-    let local_indx: isize = index as isize % width as isize;
-
-    // look back to propagate beams
-    let prev_index = index - width;
-    match grid[index] {
-        GridState::Empty => {
-            match grid[prev_index] {
-                GridState::Beam => {
-                    grid[index] = GridState::Beam;
-                    populate_beams(grid, count, width, index + width);
-                },
-                GridState::Start => {
-                    grid[index] = GridState::Beam;
-                    populate_beams(grid, count, width, index + width);
-                },
-                _ => {}
-            }
-        },        
-        _ => {}
+    if !matches!(grid[index].state, GridState::Splitter) {
+        grid[index].state = GridState::Beam;
     }
 
-    match grid[index] {
+    // Process Logic based on CURRENT state only
+    let mut paths_found = 0;
+    
+    match grid[index].state {
         GridState::Splitter => {
-            let mut local_split_count = 0;
-            // propagate beam right & left
-            if local_indx - 1 >= 0 {
-                let left_index = index - 1;
-                if grid[left_index] != GridState::Beam {
-                    local_split_count += 1;
-                    grid[left_index] = GridState::Beam;
-                    populate_beams(grid, count, width, left_index + width);
-                }
+            let local_col = (index % width) as isize;
+
+            // --- Go Left-Down ---
+            // Note: index - 1 is safe only if local_col > 0
+            if local_col > 0 {
+                let left_target = (index - 1) + width;
+                paths_found += populate_beams(grid, width, left_target);
             }
-            if local_indx + 1 < width as isize {
-                let right_index = index + 1;
-                if grid[right_index] != GridState::Beam {
-                    if local_split_count == 0 {
-                        local_split_count += 1;
-                    }
-                    grid[right_index] = GridState::Beam;                
-                    populate_beams(grid, count, width, right_index + width);
-                }
+
+            // --- Go Right-Down ---
+            if local_col + 1 < width as isize {
+                let right_target = (index + 1) + width;
+                paths_found += populate_beams(grid, width, right_target);
             }
-            *count += local_split_count;
         },
-        _ => {}
+        _ => {
+            // Standard Beam/Start/Empty: Just fall strictly down
+            paths_found += populate_beams(grid, width, index + width);
+        }
     }
+
+    // 5. Update State & Return
+    grid[index].count += paths_found;
+    grid[index].fully_processed = true;
+    
+    paths_found // Return the value explicitly!
 }
