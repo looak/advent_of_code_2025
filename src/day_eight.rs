@@ -48,11 +48,25 @@ impl Point {
     }
 }
 
+
 impl std::ops::Add for Point {
     type Output = Point;
 
     fn add(self, other: Point) -> Point {
         Point::new(self.x + other.x, self.y + other.y, self.z + other.z)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Edge {
+    u: usize,
+    v: usize,
+    len_sq: i64,
+}
+
+impl Edge {
+    fn new(u: usize, v: usize, len_sq: i64) -> Self {
+        Self { u, v, len_sq }
     }
 }
 
@@ -84,26 +98,22 @@ fn load_points() -> Vec<Point> {
     points
 }
 
-fn compute_vicinity_table(points: &[Point]) -> Vec<usize> {
+fn compute_edges(points: &[Point]) -> Vec<Edge> {
     let n = points.len();
     if n == 0 { return vec![]; }
 
-    let vicinity = (0..n)
-        .map(|i| {
-            let mut best_dist = i64::MAX;
-            let mut best_indx = 0;
-            for j in 0..n {
-                if i == j { continue; }
-                let dist = points[i].dist_sq(&points[j]);
-                if dist < best_dist {
-                    best_dist = dist;
-                    best_indx = j;
-                }
-            }
-            best_indx
-        }).collect();    
+    let mut edges: Vec<Edge> = Vec::with_capacity(n*n/2);
+    
+    for i in 0..n {
+        for j in (i + 1)..n {
+            let point_a = &points[i];
+            let point_b = &points[j];
+            let dist_sq = point_a.dist_sq(point_b);
+            edges.push(Edge::new(i, j, dist_sq));
+        }
+    }
 
-    vicinity
+    edges
 }
 
 pub fn execute() {
@@ -111,8 +121,9 @@ pub fn execute() {
     let points = load_points();
     // let mut circuits = Circuit::new();
 
-    let vicinity_table = compute_vicinity_table(&points);
+    let mut edges = compute_edges(&points);
     let mut parent: Vec<usize> = (0..points.len()).collect();
+    edges.sort_unstable_by_key(|e| e.len_sq);
 
     // Standard Find with path compression
     fn find(parent: &mut [usize], i: usize) -> usize {
@@ -132,17 +143,30 @@ pub fn execute() {
         }
     }
 
-    // 2. Merge the sets based on the neighbor links
-    for (point_idx, &neighbor_idx) in vicinity_table.iter().enumerate() {
-        union(&mut parent, point_idx, neighbor_idx);
+    let limit = 1000;
+    for edge in edges.iter().take(limit) {
+        union(&mut parent, edge.u, edge.v);
     }
 
     // Bucket points by their root parent
-    let mut circuits: std::collections::HashMap<usize, Vec<usize>> = std::collections::HashMap::new();
-    
+    let mut circuits: std::collections::HashMap<usize, Vec<usize>> = std::collections::HashMap::new();    
     for i in 0..points.len() {
         let root = find(&mut parent, i);
         circuits.entry(root).or_default().push(i);
+    }
+
+    let mut largest: [(usize, usize); 3] = [(0, 0); 3];
+    for (&circuit_id, point_indices) in &circuits {
+        if point_indices.len() > largest[0].1 {
+            largest[2] = largest[1];
+            largest[1] = largest[0];
+            largest[0] = (circuit_id, point_indices.len());
+        } else if point_indices.len() > largest[1].1 {
+            largest[2] = largest[1];
+            largest[1] = (circuit_id, point_indices.len());
+        } else if point_indices.len() > largest[2].1 {
+            largest[2] = (circuit_id, point_indices.len());
+        }
     }
 
     for (circuit_id, point_indices) in &circuits {
@@ -155,5 +179,11 @@ pub fn execute() {
         println!();
     }
 
-//    println!("Maximum distance between any two points: {}", max_distance);
+    let mut result = 1;
+    for circuit in &largest {
+        println!("Largest Circuit ID: {} with {} points", circuit.0, circuit.1);
+        result *= circuit.1;
+    }   
+
+    println!("Product of sizes of three largest circuits: {}", result);
 }

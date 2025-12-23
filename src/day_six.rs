@@ -1,87 +1,112 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Operation {
-    Add,
-    Subtract,
-    Multiply,
-    Divide,
+use std::{collections::BTreeMap, ops::IndexMut};
+
+#[derive(Debug)]
+struct Problem {
+    terms: Vec<i64>,
+    operator: Operation,
 }
 
-struct Problem {
+struct IntermediateProblem {
     terms: Vec<i64>,
     operator: Option<Operation>,
 }
 
-fn parse_line(line: &str) -> Vec<i64> {
-    line
-        .split_whitespace()
-        .map(|number| number.parse().unwrap())
-        .collect()
+#[derive(Debug, Clone, Copy)] // Make sure Operation is Copy for easier handling
+enum Operation { Add, Multiply }
+
+struct ProblemBuilder {
+    problem_data: BTreeMap<usize, ColumnData>,
 }
 
-fn load_problems() -> Vec<Problem> {
-    let file = std::fs::read_to_string("./src/math_problems.db").expect("Unable to read file");
+#[derive(Debug)] 
+struct ColumnData {
+    digits: String,
+    operator: Option<Operation>,
+}
 
-    let mut lines = file.lines();
-    let first_line = lines.next().expect("File is empty");
-    let first_row = parse_line(&first_line);
+impl ProblemBuilder {
+    fn new() -> Self {
+        Self {
+            problem_data: BTreeMap::new(),
+        }
+    }
 
-    let mut problems: Vec<Problem> = first_row
-        .into_iter()
-        .map(|part| Problem {
-            terms: vec![part],
-            operator: None,
-        })
-        .collect();
-
-    for line in lines {
-        let line = line.trim();
-        if line.is_empty() { continue; }
-        
-        // peek at first character to determine if row is operators or terms
-        let first_char = line.chars().next().unwrap();
-        if first_char.is_ascii_digit() {
-            let row_terms = parse_line(&line);
-            
-            if row_terms.len() != problems.len() {
-                panic!("Data mismatch! Expected {} columns, found {}", problems.len(), row_terms.len());
+    fn parse_line(&mut self, line: &str) {
+        for (index, ch) in line.char_indices() {
+            if ch.is_whitespace() {
+                continue;
             }
 
-            for (problem, term) in problems.iter_mut().zip(row_terms) {
-                problem.terms.push(term);
-            }
-        } else {
-            let row_operators: Vec<Operation> = line
-                .split_whitespace()
-                .map(|op_str| match op_str {
-                    "+" => Operation::Add,
-                    "-" => Operation::Subtract,
-                    "*" => Operation::Multiply,
-                    "/" => Operation::Divide,
-                    _ => panic!("Unknown operator: {}", op_str),
-                })
-                .collect();
+            let column = self.problem_data.entry(index).or_insert(ColumnData {
+                digits: String::new(),
+                operator: None,
+            });
 
-            if row_operators.len() != problems.len() {
-                panic!("Data mismatch! Expected {} columns, found {}", problems.len(), row_operators.len());
-            }
-
-            for (problem, operator) in problems.iter_mut().zip(row_operators) {
-                problem.operator = Some(operator);
+            if ch.is_ascii_digit() {
+                column.digits.push(ch);
+            } else if ch == '+' {
+                column.operator = Some(Operation::Add);
+            } else if ch == '*' {
+                column.operator = Some(Operation::Multiply);
+            } else {
+                panic!("Unexpected character in input: {}", ch);
             }
         }
     }
 
-    return problems;
+    fn collect(self) -> Vec<Problem> {
+        let mut current_operator: Option<Operation> = None;
+        let mut problems: Vec<Problem> = Vec::new();
+        let mut problem_id = 0;
+        // let mut problems: Vec<Problem> = Vec::new();
+        for (indx, col_data) in &self.problem_data {
+            println!("Column {}: {:?}", indx, col_data);
+            
+            if let Some(op) = col_data.operator {
+                current_operator = Some(op);
+                problem_id += 1;
+            }
+
+            let problem = problems.get_mut(problem_id - 1);
+            if problem.is_none() {
+                problems.push(Problem {
+                    terms: Vec::new(),
+                    operator: current_operator.unwrap(),
+                });
+            }
+
+            if !col_data.digits.is_empty() {
+                let term: i64 = col_data.digits.parse().expect("Failed to parse digits into integer");
+                problems.index_mut(problem_id - 1).terms.push(term);
+            }
+
+        }
+
+        return problems;
+
+    }
+}
+
+fn load_problems() -> Vec<Problem> {
+    let file = std::fs::read_to_string("./src/math_problems.db").expect("Unable to read file");
+    let mut problems_builder = ProblemBuilder::new();
+    for line in file.lines() {
+        problems_builder.parse_line(line);
+    }
+
+    // Transform the vertical strings into actual integers
+    problems_builder.collect()
 }
 
 pub fn execute() {
+    println!("Hello Day Six!");
     let problems = load_problems();
+    problems.iter().for_each(|p| println!("{:?}", p));
     let result = problems.iter().map(|problem| 
-        match problem.operator.expect("Operator missing for problem") {
+        match problem.operator {
             Operation::Add => problem.terms.iter().sum::<i64>(),
-            Operation::Multiply => problem.terms.iter().product::<i64>(),
-            Operation::Subtract => todo!("Implement subtraction"),
-            Operation::Divide => todo!("Implement division"),
+            Operation::Multiply => problem.terms.iter().rev().product::<i64>(),
+
     }).sum::<i64>();
 
     println!("Result: {}", result);
