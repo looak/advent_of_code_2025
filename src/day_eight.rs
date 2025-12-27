@@ -119,13 +119,12 @@ fn compute_edges(points: &[Point]) -> Vec<Edge> {
 pub fn execute() {
     println!("Hello Day Eight!");
     let points = load_points();
-    // let mut circuits = Circuit::new();
+    let n = points.len();
 
     let mut edges = compute_edges(&points);
-    let mut parent: Vec<usize> = (0..points.len()).collect();
+    let mut parent: Vec<usize> = (0..n).collect();
     edges.sort_unstable_by_key(|e| e.len_sq);
 
-    // Standard Find with path compression
     fn find(parent: &mut [usize], i: usize) -> usize {
         if parent[i] == i { i } else {
             let root = find(parent, parent[i]);
@@ -134,56 +133,27 @@ pub fn execute() {
         }
     }
 
-    // Standard Union
-    fn union(parent: &mut [usize], i: usize, j: usize) {
-        let root_i = find(parent, i);
-        let root_j = find(parent, j);
-        if root_i != root_j {
-            parent[root_j] = root_i;
+    let mut clusters_remaining = n;
+    for edge in edges {
+        let root_u = find(&mut parent, edge.u);
+        let root_v = find(&mut parent, edge.v);
+
+        if root_u != root_v {
+            parent[root_v] = root_u;
+            clusters_remaining -= 1;
+
+            if clusters_remaining == 1 {
+                println!("Found the final connection!");
+                println!("Connecting Point {} and Point {}", edge.u, edge.v);
+                
+                // "multiply together the X coordinates of the last two junction boxes"
+                let x1 = points[edge.u].x;
+                let x2 = points[edge.v].x;
+                println!("Final edge value & key {}", x1 * x2);
+                return;
+            }
         }
     }
 
-    let limit = 1000;
-    for edge in edges.iter().take(limit) {
-        union(&mut parent, edge.u, edge.v);
-    }
-
-    // Bucket points by their root parent
-    let mut circuits: std::collections::HashMap<usize, Vec<usize>> = std::collections::HashMap::new();    
-    for i in 0..points.len() {
-        let root = find(&mut parent, i);
-        circuits.entry(root).or_default().push(i);
-    }
-
-    let mut largest: [(usize, usize); 3] = [(0, 0); 3];
-    for (&circuit_id, point_indices) in &circuits {
-        if point_indices.len() > largest[0].1 {
-            largest[2] = largest[1];
-            largest[1] = largest[0];
-            largest[0] = (circuit_id, point_indices.len());
-        } else if point_indices.len() > largest[1].1 {
-            largest[2] = largest[1];
-            largest[1] = (circuit_id, point_indices.len());
-        } else if point_indices.len() > largest[2].1 {
-            largest[2] = (circuit_id, point_indices.len());
-        }
-    }
-
-    for (circuit_id, point_indices) in &circuits {
-        println!("Circuit {}: Points {:?} - cnt: {}", circuit_id, point_indices, point_indices.len());
-        // print points at indices
-        points.iter()
-            .enumerate()
-            .filter(|(idx, _)| point_indices.contains(idx))
-            .for_each(|(_, point)| println!("Point: {}-{}-{}", point.x, point.y, point.z));
-        println!();
-    }
-
-    let mut result = 1;
-    for circuit in &largest {
-        println!("Largest Circuit ID: {} with {} points", circuit.0, circuit.1);
-        result *= circuit.1;
-    }   
-
-    println!("Product of sizes of three largest circuits: {}", result);
+    panic!("Graph was not fully connected! Are there unreachable islands?");
 }
